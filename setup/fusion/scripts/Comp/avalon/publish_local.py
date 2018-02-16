@@ -18,7 +18,7 @@ def _install_fusion():
     if settings.ContextLabel == settings.ContextLabelDefault:
         settings.ContextLabel = "Fusion"
     if settings.WindowTitle == settings.WindowTitleDefault:
-        settings.WindowTitle = "Pyblish (Fusion to Deadline)"
+        settings.WindowTitle = "Pyblish (Fusion)"
 
 
 def _set_current_working_dir():
@@ -48,7 +48,7 @@ _set_current_working_dir()
 _install_fusion()
 
 # Specify target to change collected family in Collector
-pyblish.api.register_target("deadline")
+pyblish.api.register_target("renderlocal")
 
 # Run QML in modal mode so it keeps listening to the
 # server in the main thread and keeps this process
