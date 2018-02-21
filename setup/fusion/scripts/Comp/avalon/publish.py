@@ -47,9 +47,6 @@ _set_current_working_dir()
 # install fusion title
 _install_fusion()
 
-# Specify target to change collected family in Collector
-pyblish.api.register_target("deadline")
-
 # Run QML in modal mode so it keeps listening to the
 # server in the main thread and keeps this process
 # open until QML finishes.
