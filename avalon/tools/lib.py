@@ -3,7 +3,6 @@ import sys
 import contextlib
 
 from ..vendor.Qt import QtWidgets, QtCore, QtGui
-from .. import style
 
 self = sys.modules[__name__]
 self._jobs = dict()
