@@ -5,7 +5,6 @@ import avalon.api
 import avalon.fusion
 
 import pyblish_qml
-import pyblish.api
 
 
 def _install_fusion():
