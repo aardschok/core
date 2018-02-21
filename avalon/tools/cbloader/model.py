@@ -1,7 +1,6 @@
 from ... import io, style
 from ...vendor.Qt import QtCore
 from ...vendor import qtawesome as qta
-from ... import style
 
 from ..projectmanager.model import (
     TreeModel,
