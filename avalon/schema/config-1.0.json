@@ -53,6 +53,18 @@
                 "required": ["name"]
             }
         },
+        "families": {
+            "description": "A list of family names, can include icon name",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "icon": {"type": "string"}
+                },
+                "required": ["name"]
+            }
+        },
         "copy": {
             "type": "object"
         }
