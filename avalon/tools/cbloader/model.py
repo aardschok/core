@@ -9,6 +9,12 @@ from ..projectmanager.model import (
 
 from . import lib
 
+# Lazy attribute
+node_role = TreeModel.NodeRole
+display_role = QtCore.Qt.DisplayRole
+edit_role = QtCore.Qt.EditRole
+horizontal = QtCore.Qt.Horizontal
+
 
 class SubsetsModel(TreeModel):
     COLUMNS = ["subset",
@@ -97,16 +103,20 @@ class SubsetsModel(TreeModel):
         })
 
     def refresh(self):
+        print("Refresh!")
 
         self.clear()
         self.beginResetModel()
+
         if not self._asset_id:
             self.endResetModel()
             return
 
+        # TODO: Get visual items
+        print("Going to iterate over subsets!")
+
         row = 0
-        for subset in io.find({"type": "subset",
-                               "parent": self._asset_id}):
+        for subset in io.find({"type": "subset", "parent": self._asset_id}):
 
             last_version = io.find_one({"type": "version",
                                         "parent": subset['_id']},
@@ -114,7 +124,7 @@ class SubsetsModel(TreeModel):
             if not last_version:
                 # No published version for the subset
                 continue
-
+            print("Creating node for: %s" % subset["name"])
             data = subset.copy()
             data['subset'] = data['name']
 
@@ -123,7 +133,7 @@ class SubsetsModel(TreeModel):
 
             self.add_child(node)
 
-            # Set the version information
+            # Set the version information)
             index = self.index(row, 0, parent=QtCore.QModelIndex())
             self.set_version(index, last_version)
 
@@ -202,3 +212,288 @@ class FamiliesFilterProxyModel(QtCore.QSortFilterProxyModel):
 
         # We want to keep the families which are not in the list
         return family in self._families
+
+
+class GroupByProxyModel(QtCore.QAbstractProxyModel):
+
+    def __init__(self, groupby=1, parent=None):
+        super(GroupByProxyModel, self).__init__(parent=parent)
+
+        self.fallback_group = "subset"
+        self.group_by = groupby
+
+        self._groups = list()
+        self._group_indexes = list()
+        self._group_to_source_row = dict()
+        self._source_row_to_group_row = list()  # can this be a set?
+
+    def flags(self, index):
+        if index.internalPointer() is None:
+            return QtCore.Qt.ItemIsEnabled
+        else:
+            return QtCore.Qt.ItemIsEnabled | QtCore.Qt.ItemIsSelectable
+
+    def setSourceModel(self, model):
+        super(GroupByProxyModel, self).setSourceModel(model)
+        self.setGroupBy(self.group_by)
+
+    def index(self, row, column, parent=QtCore.QModelIndex()):
+
+        if parent.isValid():
+
+            group_idx = self._group_indexes[parent.row()]
+            new_index = self.createIndex(row, column, group_idx)
+
+            return new_index
+
+        # Note: Added check if row is in self_group_indexes
+        elif column == 0 and row in self._group_indexes:
+            return self._group_indexes[row]
+
+        else:
+            return self.createIndex(row, column, None)
+
+    def parent(self, index):
+
+        if index == QtCore.QModelIndex() or index.internalPointer() is None:
+            return QtCore.QModelIndex()
+        elif index.column():
+            return QtCore.QModelIndex()
+        else:
+            return index.internalPointer()
+
+    def mapToSource(self, index):
+        # TODO: Item comes in but index.internalPointer is None, how to continue
+
+        if index.internalPointer() is not None:
+
+            idx = QtCore.QModelIndex(index.internalPointer()).row()
+            if index.column() == 0:
+                return QtCore.QModelIndex()
+            if idx < 0 or idx >= self.groupCount():
+                return QtCore.QModelIndex()
+
+            grp_to_src = self._group_to_source_row[self._groups[idx]]
+            source_row = grp_to_src.at(index.row())
+
+            # Accommodate virtual column
+            return self.sourceModel().index(source_row,
+                                            index.column() - 1,
+                                            QtCore.QModelIndex())
+        else:
+            return QtCore.QModelIndex()
+
+    def mapFromSource(self, index):
+
+        # Which group did we put this row into?
+        group = self.whichGroup(index.row())
+        group_idx = self._groups.index(group)
+
+        if group_idx < 0:
+            return QtCore.QModelIndex()
+
+        # Accommodate virtual column
+        index = QtCore.QModelIndex(self.createIndex(group_idx, 0, None))
+        source_row = self._source_row_to_group_row[index.row()]
+
+        return self.createIndex(source_row, index.column() + 1, index)
+
+    def data(self, index, role=display_role):
+        """This function is called constantly behind the scenes"""
+        if not index.isValid():
+            return
+
+        # If we are not at column 0 or we have a parent
+        if index.column() > 0:
+            src_index = self.mapToSource(index)
+            return self.sourceModel().data(src_index, role)
+
+        elif index.internalPointer() is None:
+
+            # its our group by!
+            row = index.row()
+            if row < self.groupCount():
+
+                # Blank values become "(blank)"
+                group = self._groups[row]
+                if not group:
+                    group = self.fallback_group
+
+                # Format the group by with ride count etc
+                if self.group_by != -1:
+                    source_model = self.sourceModel()
+                    header = source_model.headerData(self.group_by,
+                                                     horizontal,
+                                                     display_role)
+
+                    count = len(self._group_to_source_row.get(header, []))
+                    return_string = "%s: %s (%s)" % (header, group, count)
+
+                else:
+                    if row not in self._groups:
+                        return
+                    print("DATA 2")
+                    count = self._groups[row].count()
+                    return_string = "All %s rides" % count
+
+                return return_string
+
+    def headerData(self, section, orientation, role):
+
+        if section:
+            return self.sourceModel().headerData(section - 1, orientation, role)
+        else:
+            return "*"
+
+    def setHeaderData(self, section,  value, orientation=horizontal,
+                      role=edit_role):
+
+        if section:
+            source_model = self.sourceModel()
+            s = section - 1  # Using `s` because PEP08
+            return source_model.setHeaderData(s, value, orientation, role)
+
+        return True
+
+    def columnCount(self, parent=QtCore.QModelIndex()):
+        # accommodate virtual group column
+        return self.sourceModel().columnCount(parent) + 1
+
+    def rowCount(self, parent=QtCore.QModelIndex()):
+
+        if parent == QtCore.QModelIndex():
+            return self.groupCount()
+
+        elif parent.column() == 0 and parent.internalPointer() is None:
+            grp_item = self._groups[parent.row()]
+            return self._group_to_source_row[grp_item].count()
+
+        else:
+            return 0
+
+    def hasChildren(self, index):
+
+        if index == QtCore.QModelIndex():
+            result = self.groupCount() > 0
+        elif index.column() == 0 and index.internalPointer is None:
+            grp_item = self._groups[index.row()]
+            result = self._group_to_source_row[grp_item].count() > 0
+        else:
+            result = False
+
+        return result
+
+    def whichGroup(self, row):
+
+        if self.group_by == -1:
+            return "default"
+        section = self.group_by + 1
+        header_data = self.headerData(section, horizontal, display_role)
+
+        _idx = self.sourceModel().index(row, self.group_by, parent=QtCore.QModelIndex())
+        source_data = self.sourceModel().data(_idx, display_role)
+
+        return self.groupFromValue(header_data, source_data)
+
+    def setGroupBy(self, column):
+
+        # Shift down
+        if column >= 0:
+            column -= 1
+
+        self.group_by = column  # Accommodate virtual column
+
+        # Debug here
+        model = self.sourceModel()
+        print("header: %s" % model.headerData(column, horizontal, display_role))
+        print("grouping by: %s" % self.group_by)
+
+        self.refresh()
+
+    def groupFromValue(self, a, b):
+        """
+        Args
+            a(str):
+            b(str):
+        Returns:
+             str
+        """
+        # TODO: Fix grouping
+
+        for key, items in self._group_to_source_row.items():
+            for item in items:
+                # Do some magic voodoo here
+                pass
+
+        return "default"
+
+    def groupCount(self):
+        return len(self._groups)
+
+    def refresh(self):
+
+        print("Setting groups")
+
+        self.beginResetModel()
+        self.clearGroups()
+
+        source_model = self.sourceModel()
+
+        if not source_model:
+            print("No source model?")
+            return
+
+        # TODO: Ensure that row 0 gets populated as well!
+        row_count = self.sourceModel().rowCount(QtCore.QModelIndex())
+        print("source mode rowCount(): %s" % row_count)
+
+        if self.group_by > 0:
+            print("group by >= 0")
+            for i in range(row_count):
+
+                # Get group
+                value = self.whichGroup(i)
+
+                # Get row
+                rows = self._group_to_source_row.get(value, [])
+                if not rows:
+                    # Add to collection of groups
+                    self._group_to_source_row[value] = rows
+
+                self._source_row_to_group_row.append(len(rows))
+                rows.append(i)
+
+        else:
+            rows = list()
+            for i in range(row_count):
+                rows.append(i)
+                self._source_row_to_group_row.append(i)
+
+            self._group_to_source_row["default"] = rows
+
+        # Update list of groups
+        print("Updating group list!")
+        print("group list: %s" % self._group_to_source_row)
+
+        group = 0
+        for key, val in self._group_to_source_row.items():
+            self._groups.append(key)
+
+            group += 1
+
+            # TODO: Fix createIndex, it does not return an index for the model to show
+            group_index = self.createIndex(group, self.group_by, None)
+
+            print("group index", group_index)
+
+            self._group_indexes.append(group_index)
+
+        self.endResetModel()
+
+    def clearGroups(self):
+
+        self._groups = list()
+        self._group_indexes = list()
+
+        self._group_to_source_row = dict()
+        self._source_row_to_group_row = list()
