@@ -39,6 +39,7 @@ class SubsetWidget(QtWidgets.QWidget):
             }
         """)
         view.setAllColumnsShowFocus(True)
+        controls = ControlsWidget()
 
         # Set view delegates
         version_delegate = VersionDelegate()
@@ -53,6 +54,7 @@ class SubsetWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(filter)
         layout.addWidget(view)
+        layout.addWidget(controls)
 
         view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
@@ -67,6 +69,7 @@ class SubsetWidget(QtWidgets.QWidget):
             }
         }
 
+        self.controls = controls
         self.proxy = proxy
         self.model = model
         self.view = view
@@ -185,6 +188,11 @@ class SubsetWidget(QtWidgets.QWidget):
             pass
         rows.insert(0, point_index)
 
+        # Check how many times the loader(s) must be triggered
+        amount = self.controls.get_amount()
+
+        self.echo("Loading %i asset(s) %i times" % (len(rows), amount))
+
         # Trigger
         for row in rows:
             node = row.data(self.model.NodeRole)
@@ -200,10 +208,14 @@ class SubsetWidget(QtWidgets.QWidget):
                 continue
 
             try:
-                api.load(Loader=loader, representation=representation)
+                for i in range(amount):
+                    api.load(Loader=loader, representation=representation)
             except pipeline.IncompatibleLoaderError as exc:
                 self.echo(exc)
                 continue
+
+        # Reset amount to 1
+        self.controls.reset_amount()
 
     def echo(self, message):
         print(message)
@@ -450,3 +462,66 @@ class FamilyListWidget(QtWidgets.QListWidget):
         menu.addAction(state_unchecked)
 
         menu.exec_(globalpos)
+
+
+class ControlsWidget(QtWidgets.QWidget):
+    """Main widget for controls which steer the Loaders"""
+
+    def __init__(self, parent=None):
+        QtWidgets.QWidget.__init__(self, parent=parent)
+
+        layout = QtWidgets.QHBoxLayout()
+        layout.setContentsMargins(5, 0, 0, 0)
+
+        reset_values_icon = qtawesome.icon("fa.backward", color="white")
+        reset_values = QtWidgets.QPushButton()
+        reset_values.setIcon(reset_values_icon)
+        reset_values.setFixedWidth(28)
+
+        amount_label = QtWidgets.QLabel("Amount")
+
+        amount = QtWidgets.QSpinBox()
+        amount.setMinimum(1)
+        amount.setMaximum(100)
+        amount.setFocusPolicy(QtCore.Qt.ClickFocus)
+        amount.setAlignment(QtCore.Qt.AlignRight)
+
+        # Force right handed ticks, there is bug in the dark theme we use which
+        # forces the down tick to the left
+        amount.setStyleSheet("""
+            QSpinBox::up-button {
+                subcontrol-origin: border;
+                subcontrol-position: top right;}
+                                
+            QSpinBox::down-button {
+                subcontrol-origin: border;
+                subcontrol-position: bottom right;}"""
+                             )
+
+        layout.addWidget(reset_values)
+        layout.addWidget(amount_label)
+        layout.addWidget(amount)
+        layout.addStretch()
+
+        self._amount = amount
+        self._reset = reset_values
+
+        self.setLayout(layout)
+
+        self.make_connections()
+
+    def make_connections(self):
+        self._reset.clicked.connect(self.on_reset)
+
+    def on_reset(self):
+        self.reset_all()
+
+    def get_amount(self):
+        return self._amount.value()
+
+    def reset_amount(self):
+        self._amount.setValue(1)
+
+    def reset_all(self):
+        """Reset all controls"""
+        self._amount.setValue(1)
