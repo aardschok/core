@@ -4,11 +4,9 @@ import inspect
 
 from ...vendor.Qt import QtWidgets, QtCore
 from ...vendor import qtawesome
-from ... import io
-from ... import api
-from ... import pipeline
+from ... import api, io, pipeline
 
-from .model import SubsetsModel, FamiliesFilterProxyModel
+from .model import SubsetsModel, FamiliesFilterProxyModel, LoaderModel
 from .delegates import PrettyTimeDelegate, VersionDelegate
 from . import lib
 
@@ -213,9 +211,6 @@ class SubsetWidget(QtWidgets.QWidget):
             except pipeline.IncompatibleLoaderError as exc:
                 self.echo(exc)
                 continue
-
-        # Reset amount to 1
-        self.controls.reset_amount()
 
     def echo(self, message):
         print(message)
@@ -470,25 +465,33 @@ class ControlsWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent=parent)
 
-        layout = QtWidgets.QHBoxLayout()
-        layout.setContentsMargins(5, 0, 0, 0)
+        layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(2, 4, 2, 4)
+        layout.setSpacing(4)
 
-        reset_values_icon = qtawesome.icon("fa.backward", color="white")
-        reset_values = QtWidgets.QPushButton()
-        reset_values.setIcon(reset_values_icon)
-        reset_values.setFixedWidth(28)
+        reset_values = QtWidgets.QPushButton("Reset to Default")
+
+        amount_layout = QtWidgets.QHBoxLayout()
+        amount_layout.setSpacing(4)
 
         amount_label = QtWidgets.QLabel("Amount")
-
         amount = QtWidgets.QSpinBox()
         amount.setMinimum(1)
         amount.setMaximum(100)
         amount.setFocusPolicy(QtCore.Qt.ClickFocus)
         amount.setAlignment(QtCore.Qt.AlignRight)
 
+        # Show all loaders here
+        model = LoaderModel()
+        view = QtWidgets.QListView()
+        view.setModel(model)
+
         # Force right handed ticks, there is bug in the dark theme we use which
         # forces the down tick to the left
         amount.setStyleSheet("""
+            QLabel {
+                font-style: bold;
+            }
             QSpinBox::up-button {
                 subcontrol-origin: border;
                 subcontrol-position: top right;}
@@ -498,13 +501,18 @@ class ControlsWidget(QtWidgets.QWidget):
                 subcontrol-position: bottom right;}"""
                              )
 
+        amount_layout.addWidget(amount_label)
+        amount_layout.addWidget(amount)
+
         layout.addWidget(reset_values)
-        layout.addWidget(amount_label)
-        layout.addWidget(amount)
-        layout.addStretch()
+        layout.addLayout(amount_layout)
+        layout.addWidget(view)
 
         self._amount = amount
         self._reset = reset_values
+
+        self.view = view
+        self.model = model
 
         self.setLayout(layout)
 
@@ -525,3 +533,76 @@ class ControlsWidget(QtWidgets.QWidget):
     def reset_all(self):
         """Reset all controls"""
         self._amount.setValue(1)
+
+    def get_selected_loader(self):
+        selection = self.view.selectionModel()
+
+        loader = None
+        active = selection.currentIndex()
+        if active:
+            rows = selection.selectedRows(column=0)
+            if active in rows:
+                loader = active.data(self.model.NodeRole)
+
+        return loader
+
+    def find_loaders(self, nodes):
+        model = self.view.model()
+        model.refresh(nodes)
+
+
+class PanelWidget(QtWidgets.QWidget):
+    refresh = QtCore.Signal()
+
+    def __init__(self, parent=None):
+        QtWidgets.QWidget.__init__(self, parent=parent)
+
+        layout = QtWidgets.QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        tab_widget = QtWidgets.QTabWidget()
+
+        controls = ControlsWidget()
+        version = VersionWidget()
+
+        tab_widget.addTab(controls, "Controls")
+        tab_widget.addTab(version, "Version")
+
+        load_button = QtWidgets.QPushButton("Load")
+
+        layout.addWidget(tab_widget)
+        layout.addWidget(load_button)
+
+        self.controls = controls
+        self.version = version
+
+        self.setLayout(layout)
+
+        self.data = {
+            "loaders": controls,
+            "version": version
+        }
+
+        load_button.clicked.connect(self.on_load)
+        self.refresh.connect(self.on_refresh)
+
+    def on_load(self):
+
+        loader_node = self.controls.get_selected_loader()
+        amount = self.controls.get_amount()
+
+        try:
+            loader = loader_node["loader"]
+            representation = loader_node["representation"]
+            for i in range(amount):
+                api.load(Loader=loader, representation=representation)
+        except pipeline.IncompatibleLoaderError as exc:
+            print(exc)
+            pass
+
+            # Reset amount to 1
+        self.controls.reset_amount()
+
+    def on_refresh(self, nodes):
+        self.controls.find_loaders(nodes)
