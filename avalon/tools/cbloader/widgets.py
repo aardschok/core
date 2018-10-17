@@ -34,10 +34,9 @@ class SubsetWidget(QtWidgets.QWidget):
             QTreeView::item{
                 padding: 5px 1px;
                 border: 0px;
-            }
-        """)
+            }""")
+
         view.setAllColumnsShowFocus(True)
-        controls = ControlsWidget()
 
         # Set view delegates
         version_delegate = VersionDelegate()
@@ -52,7 +51,6 @@ class SubsetWidget(QtWidgets.QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(filter)
         layout.addWidget(view)
-        layout.addWidget(controls)
 
         view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         view.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
@@ -67,7 +65,6 @@ class SubsetWidget(QtWidgets.QWidget):
             }
         }
 
-        self.controls = controls
         self.proxy = proxy
         self.model = model
         self.view = view
@@ -186,11 +183,6 @@ class SubsetWidget(QtWidgets.QWidget):
             pass
         rows.insert(0, point_index)
 
-        # Check how many times the loader(s) must be triggered
-        amount = self.controls.get_amount()
-
-        self.echo("Loading %i asset(s) %i times" % (len(rows), amount))
-
         # Trigger
         for row in rows:
             node = row.data(self.model.NodeRole)
@@ -206,8 +198,7 @@ class SubsetWidget(QtWidgets.QWidget):
                 continue
 
             try:
-                for i in range(amount):
-                    api.load(Loader=loader, representation=representation)
+                api.load(Loader=loader, representation=representation)
             except pipeline.IncompatibleLoaderError as exc:
                 self.echo(exc)
                 continue
@@ -344,10 +335,10 @@ class VersionWidget(QtWidgets.QWidget):
 
         layout = QtWidgets.QVBoxLayout(self)
 
-        label = QtWidgets.QLabel("Version")
+        # label = QtWidgets.QLabel("Version")
         data = VersionTextEdit()
         data.setReadOnly(True)
-        layout.addWidget(label)
+        # layout.addWidget(label)
         layout.addWidget(data)
 
         self.data = data
