@@ -134,6 +134,9 @@ class Window(QtWidgets.QDialog):
         self.echo("Fetching subset..")
         lib.schedule(self._versionschanged, 50, channel="mongo")
 
+        self.echo("Fetching Loaders")
+        self._subsetchanged()
+
     def on_versionschanged(self, *args):
         self.echo("Fetching version..")
         lib.schedule(self._versionschanged, 150, channel="mongo")
@@ -210,6 +213,23 @@ class Window(QtWidgets.QDialog):
                 version = node['version_document']['_id']
 
         self.data['model']['version'].set_version(version)
+
+    def _subsetchanged(self, *args):
+        """Selected subset has changed"""
+
+        subsets = self.data["model"]["subsets"]
+        selection = subsets.view.selectionModel()
+
+        # Active must be in the selected rows otherwise we
+        # assume it's not actually an "active" current index.
+        node = None
+        active = selection.currentIndex()
+        if active:
+            rows = selection.selectedRows(column=active.column())
+            if active in rows:
+                node = active.data(subsets.model.NodeRole)
+
+        self.data["model"]["loaders"].find_loaders([node])
 
     def _set_context(self, context, refresh=True):
         """Set the selection in the interface using a context.
