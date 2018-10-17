@@ -8,7 +8,11 @@ from ... import api, io, style
 from .. import lib
 
 from .lib import refresh_family_config
-from .widgets import SubsetWidget, VersionWidget, FamilyListWidget
+from .widgets import (
+    SubsetWidget,
+    FamilyListWidget,
+    PanelWidget
+)
 
 module = sys.modules[__name__]
 module.window = None
@@ -40,7 +44,7 @@ class Window(QtWidgets.QDialog):
         assets = AssetWidget()
         families = FamilyListWidget()
         subsets = SubsetWidget()
-        version = VersionWidget()
+        panel = PanelWidget()
 
         # Create splitter to show / hide family filters
         asset_filter_splitter = QtWidgets.QSplitter()
@@ -55,8 +59,8 @@ class Window(QtWidgets.QDialog):
         split = QtWidgets.QSplitter()
         split.addWidget(asset_filter_splitter)
         split.addWidget(subsets)
-        split.addWidget(version)
-        split.setSizes([180, 950, 200])
+        split.addWidget(panel)
+        split.setSizes([180, 950, 240])
 
         # Remove QSplitter border
         split.setStyleSheet("QSplitter { border: 0px; }")
@@ -83,7 +87,8 @@ class Window(QtWidgets.QDialog):
             "model": {
                 "assets": assets,
                 "subsets": subsets,
-                "version": version,
+                "version": panel.data["version"],
+                "loaders": panel.data["loaders"],
             },
             "label": {
                 "message": message,
