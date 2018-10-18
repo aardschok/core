@@ -87,8 +87,8 @@ class Window(QtWidgets.QDialog):
             "model": {
                 "assets": assets,
                 "subsets": subsets,
+                "panel": panel,
                 "version": panel.data["version"],
-                "loaders": panel.data["loaders"],
             },
             "label": {
                 "message": message,
@@ -217,19 +217,22 @@ class Window(QtWidgets.QDialog):
     def _subsetchanged(self, *args):
         """Selected subset has changed"""
 
+        panel = self.data["model"]["panel"]
         subsets = self.data["model"]["subsets"]
         selection = subsets.view.selectionModel()
 
         # Active must be in the selected rows otherwise we
         # assume it's not actually an "active" current index.
         node = None
+        rows = []
+
         active = selection.currentIndex()
         if active:
             rows = selection.selectedRows(column=active.column())
             if active in rows:
                 node = active.data(subsets.model.NodeRole)
 
-        self.data["model"]["loaders"].find_loaders([node])
+        panel.refresh.emit([node, rows])
 
     def _set_context(self, context, refresh=True):
         """Set the selection in the interface using a context.
