@@ -480,9 +480,6 @@ class ControlsWidget(QtWidgets.QWidget):
         # Force right handed ticks, there is bug in the dark theme we use which
         # forces the down tick to the left
         amount.setStyleSheet("""
-            QLabel {
-                font-style: bold;
-            }
             QSpinBox::up-button {
                 subcontrol-origin: border;
                 subcontrol-position: top right;}
@@ -543,7 +540,7 @@ class ControlsWidget(QtWidgets.QWidget):
 
 
 class PanelWidget(QtWidgets.QWidget):
-    refresh = QtCore.Signal()
+    refresh = QtCore.Signal(list)
 
     def __init__(self, parent=None):
         QtWidgets.QWidget.__init__(self, parent=parent)
@@ -575,6 +572,8 @@ class PanelWidget(QtWidgets.QWidget):
             "version": version
         }
 
+        self._representations = []
+
         load_button.clicked.connect(self.on_load)
         self.refresh.connect(self.on_refresh)
 
@@ -585,14 +584,14 @@ class PanelWidget(QtWidgets.QWidget):
 
         try:
             loader = loader_node["loader"]
-            representation = loader_node["representation"]
             for i in range(amount):
-                api.load(Loader=loader, representation=representation)
+                for representation in self._representations:
+                    api.load(Loader=loader, representation=representation)
         except pipeline.IncompatibleLoaderError as exc:
             print(exc)
             pass
 
-            # Reset amount to 1
+        # Reset amount to 1
         self.controls.reset_amount()
 
     def on_refresh(self, nodes):
