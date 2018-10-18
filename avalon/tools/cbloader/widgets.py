@@ -594,5 +594,18 @@ class PanelWidget(QtWidgets.QWidget):
         # Reset amount to 1
         self.controls.reset_amount()
 
-    def on_refresh(self, nodes):
-        self.controls.find_loaders(nodes)
+    def on_refresh(self, args):
+
+        active, rows = args
+
+        self.controls.model.refresh(active)
+
+        self._representations = []
+        for row in rows:
+            node = row.data(self.controls.model.NodeRole)
+            # Get representation
+            version_id = node["version_document"]["_id"]
+            representations = io.find({"type": "representation",
+                                       "parent": version_id})
+
+            self._representations.extend(representations)
