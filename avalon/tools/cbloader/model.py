@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from ... import io, api, style
 from ...vendor.Qt import QtCore
 from ...vendor import qtawesome as qta
@@ -177,36 +179,41 @@ class LoaderModel(TreeModel):
     def setData(self, index, value, role=QtCore.Qt.EditRole):
         return super(LoaderModel, self).setData(index, value, role)
 
-    def refresh(self, nodes=None):
+    def refresh(self, node=None):
 
-        def sorter(value):
+        def sorter(plugin):
             """Sort the Loaders by their order and then their name"""
-            Plugin = value[1]
-            return Plugin.order, Plugin.__name__
+            return plugin.order, plugin.__name__
 
         self.clear()
+
+        loader_lookup = defaultdict(list)
+
         self.beginResetModel()
-        if not nodes:
+        if not node:
             self.endResetModel()
             return
 
-        loaders = list()
-
         # Create look up
         available_loaders = api.discover(api.Loader)
-        version_ids = {n['version_document']['_id'] for n in nodes}
+        version_id = node['version_document']['_id']
         representations = io.find({"type": "representation",
-                                   "parent": {"$in": list(version_ids)}})
+                                   "parent": version_id})
 
-        for repr in representations:
-            for loader in api.loaders_from_representation(available_loaders,
-                                                          repr['_id']):
-                loaders.append((repr, loader))
+        for representation in representations:
+            loaders = api.loaders_from_representation(available_loaders,
+                                                      representation['_id'])
+            for loader in loaders:
+                loader_lookup[loader].append(representation)
+
+        # sort based on loader order
+        sorted_by_order = {l: loader_lookup[l] for l in
+                           sorted(loader_lookup, key=sorter)}
 
         row = 0
-        for representation, loader in sorted(loaders, key=sorter):
-            # Label
+        for loader, representations in sorted_by_order.items():
 
+            # Label
             loader_node = Node()
 
             label = getattr(loader, "label", None)
@@ -214,11 +221,13 @@ class LoaderModel(TreeModel):
                 label = loader.__name__
 
             # Add the representation as suffix
+            # Get the representation for the name
+            representation = representations[0]
             label = "{0} ({1})".format(label, representation['name'])
 
             loader_node.update({
                 "label": label,
-                "representation": representation,
+                "representations": representations,
                 "loader": loader,
                 "icon": getattr(loader, "icon", None)
             })
