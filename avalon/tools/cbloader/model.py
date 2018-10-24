@@ -181,13 +181,12 @@ class LoaderModel(TreeModel):
 
     def refresh(self, node=None):
 
-        def sorter(plugin):
+        def sorter(value):
             """Sort the Loaders by their order and then their name"""
+            plugin = value[0]
             return plugin.order, plugin.__name__
 
         self.clear()
-
-        loader_lookup = defaultdict(list)
 
         self.beginResetModel()
         if not node:
@@ -200,18 +199,15 @@ class LoaderModel(TreeModel):
         representations = io.find({"type": "representation",
                                    "parent": version_id})
 
+        loaders = list()
         for representation in representations:
-            loaders = api.loaders_from_representation(available_loaders,
-                                                      representation['_id'])
-            for loader in loaders:
-                loader_lookup[loader].append(representation)
-
-        # sort based on loader order
-        sorted_by_order = {l: loader_lookup[l] for l in
-                           sorted(loader_lookup, key=sorter)}
+            _loaders = api.loaders_from_representation(available_loaders,
+                                                       representation['_id'])
+            for loader in _loaders:
+                loaders.append((loader, representation))
 
         row = 0
-        for loader, representations in sorted_by_order.items():
+        for loader, representation in sorted(loaders, key=sorter):
 
             # Label
             loader_node = Node()
@@ -222,12 +218,11 @@ class LoaderModel(TreeModel):
 
             # Add the representation as suffix
             # Get the representation for the name
-            representation = representations[0]
             label = "{0} ({1})".format(label, representation['name'])
 
             loader_node.update({
                 "label": label,
-                "representations": representations,
+                "representations": representation,
                 "loader": loader,
                 "icon": getattr(loader, "icon", None)
             })
