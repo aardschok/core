@@ -472,6 +472,9 @@ class ControlsWidget(QtWidgets.QWidget):
         amount.setFocusPolicy(QtCore.Qt.ClickFocus)
         amount.setAlignment(QtCore.Qt.AlignRight)
 
+        # Options layout for option widgets
+        options_layout = QtWidgets.QVBoxLayout()
+
         # Show all loaders here
         model = LoaderModel()
         view = QtWidgets.QListView()
@@ -494,13 +497,18 @@ class ControlsWidget(QtWidgets.QWidget):
 
         layout.addWidget(reset_values)
         layout.addLayout(amount_layout)
+        layout.addLayout(options_layout)
         layout.addWidget(view)
 
+        self.options = options_layout
         self._amount = amount
         self._reset = reset_values
 
         self.view = view
         self.model = model
+        self.selection_model = view.selectionModel()
+
+        self.data = {}
 
         self.setLayout(layout)
 
@@ -508,6 +516,12 @@ class ControlsWidget(QtWidgets.QWidget):
 
     def make_connections(self):
         self._reset.clicked.connect(self.on_reset)
+        self.selection_model.selectionChanged.connect(self.get_loader_controls)
+
+    def add_double3(self, option):
+        widget = Double3(name=option.name, values=option.default)
+        self._layout.addWidget(widget)
+        self.data[option.name] = widget
 
     def on_reset(self):
         self.reset_all()
@@ -533,6 +547,19 @@ class ControlsWidget(QtWidgets.QWidget):
                 loader = active.data(self.model.NodeRole)
 
         return loader
+
+    def get_loader_controls(self):
+
+        loader_node = self.get_selected_loader()
+        loader = loader_node["loader"]
+
+        if not hasattr(loader, "options"):
+            return
+
+        for option in loader.options:
+            if isinstance(option, api.Double3):
+                self.add_double3(option.default)
+            continue
 
     def find_loaders(self, nodes):
         model = self.view.model()
@@ -582,6 +609,8 @@ class PanelWidget(QtWidgets.QWidget):
         loader_node = self.controls.get_selected_loader()
         amount = self.controls.get_amount()
 
+        # Get option settings
+
         try:
             loader = loader_node["loader"]
             for i in range(amount):
@@ -609,3 +638,37 @@ class PanelWidget(QtWidgets.QWidget):
                                        "parent": version_id})
 
             self._representations.extend(representations)
+
+
+class Double3(QtWidgets.QWidget):
+
+    def __init__(self, parent=None, name=None, values=None):
+        QtWidgets.QWidget.__init__(self, parent=parent)
+
+        layout = QtWidgets.QHBoxLayout()
+
+        label = QtWidgets.QLabel(name)
+
+        x = QtWidgets.QDoubleSpinBox()
+        y = QtWidgets.QDoubleSpinBox()
+        z = QtWidgets.QDoubleSpinBox()
+
+        layout.addWidget(label)
+        layout.addWidget(x)
+        layout.addWidget(y)
+        layout.addWidget(z)
+
+        self.x = x
+        self.y = y
+        self.z = z
+
+        if values:
+            assert len(values) == 3, "Values are not a 3 values"
+            self.x.setValue(values[0])
+            self.y.setValue(values[1])
+            self.z.setValue(values[2])
+
+        self.setLayout(layout)
+
+    def get_values(self):
+        return self.x.value(), self.y.value(), self.z.value()
